@@ -4,8 +4,9 @@ setlocal EnableExtensions EnableDelayedExpansion
 rem ------------------------------------------------------------
 rem Drag & Drop OCR runner for yomitoku
 rem - Supports: PDF, image file, folder containing images
-rem - Output text analysis: analysis_results
-rem - Output figures: figure
+rem - OCR markdown output: ocr_results
+rem - OCR figures output: ocr_results\firgures
+rem - Visualization analysis output: analysis_results
 rem ------------------------------------------------------------
 
 set "SCRIPT_DIR=%~dp0"
@@ -34,11 +35,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
-set "OUT_DIR=%SCRIPT_DIR%analysis_results"
-set "FIG_DIR=%SCRIPT_DIR%figure"
+set "OCR_DIR=%SCRIPT_DIR%ocr_results"
+set "FIG_SUBDIR=firgures"
+set "FIG_DIR=%OCR_DIR%\%FIG_SUBDIR%"
+set "ANALYSIS_DIR=%SCRIPT_DIR%analysis_results"
 
-if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
+if not exist "%OCR_DIR%" mkdir "%OCR_DIR%"
 if not exist "%FIG_DIR%" mkdir "%FIG_DIR%"
+if not exist "%ANALYSIS_DIR%" mkdir "%ANALYSIS_DIR%"
 
 if "%~1"=="" (
     echo [INFO] Drop PDF, image file, or folder onto this bat file.
@@ -63,6 +67,7 @@ if not exist "%TARGET%" (
 if exist "%TARGET%\*" (
     echo [INFO] Processing folder: "%TARGET%"
     call :run_ocr "%TARGET%"
+    if errorlevel 1 set /a skipped+=1
     shift
     goto process_args
 )
@@ -71,6 +76,7 @@ call :is_supported_file "%TARGET%"
 if "!supported!"=="1" (
     echo [INFO] Processing file: "%TARGET%"
     call :run_ocr "%TARGET%"
+    if errorlevel 1 set /a skipped+=1
 ) else (
     echo [WARN] Unsupported file type: "%TARGET%"
     set /a skipped+=1
@@ -81,14 +87,32 @@ goto process_args
 
 :run_ocr
 set "INPUT=%~1"
-rem md format gives a readable analysis output while keeping structured data.
-yomitoku "%INPUT%" -f md -o "%OUT_DIR%" --figure --figure_dir "%FIG_DIR%"
-if errorlevel 1 (
+
+rem OCR result (md) -> ocr_results, figures -> ocr_results\firgures.
+rem Running inside OCR_DIR helps yomitoku emit relative figure paths in markdown.
+pushd "%OCR_DIR%" >nul
+yomitoku "%INPUT%" -f md -o "." --figure --figure_dir ".\%FIG_SUBDIR%"
+set "OCR_RC=%ERRORLEVEL%"
+popd >nul
+
+if not "%OCR_RC%"=="0" (
     echo [ERROR] OCR failed: "%INPUT%"
-) else (
-    set /a processed+=1
+    exit /b 1
 )
-exit /b
+
+rem Save visual analysis artifacts (layout/text detector view) in analysis_results.
+pushd "%ANALYSIS_DIR%" >nul
+yomitoku "%INPUT%" -v -o "."
+set "ANALYSIS_RC=%ERRORLEVEL%"
+popd >nul
+
+if not "%ANALYSIS_RC%"=="0" (
+    echo [ERROR] Analysis visualization failed: "%INPUT%"
+    exit /b 1
+)
+
+set /a processed+=1
+exit /b 0
 
 :is_supported_file
 set "supported=0"
@@ -107,8 +131,9 @@ exit /b
 :done
 echo.
 echo [DONE] Processed: %processed%  Skipped: %skipped%
-echo [DONE] Analysis output: "%OUT_DIR%"
-echo [DONE] Figure output:   "%FIG_DIR%"
+echo [DONE] OCR markdown output: "%OCR_DIR%"
+echo [DONE] OCR figure output:   "%FIG_DIR%"
+echo [DONE] Analysis output:     "%ANALYSIS_DIR%"
 
 popd >nul
 exit /b 0

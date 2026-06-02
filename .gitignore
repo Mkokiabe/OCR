@@ -3,6 +3,7 @@ __pycache__/
 
 # OCR outputs
 analysis_results/
+ocr_results/
 figure/
 
 # Python artifacts
