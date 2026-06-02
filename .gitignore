@@ -1,0 +1,10 @@
+.venv
+__pycache__/
+
+# OCR outputs
+analysis_results/
+figure/
+
+# Python artifacts
+*.pyc
+*.pyo
